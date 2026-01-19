@@ -1,4 +1,4 @@
-$id: https://agenticworkflow.io/schemas/0.9.0/workflow.yaml
+$id: https://agentic-workflow.org/schemas/0.9.0/workflow.yaml
 $schema: https://json-schema.org/draft/2020-12/schema
 description: Agentic Workflow DSL - Workflow Schema.
 type: object
