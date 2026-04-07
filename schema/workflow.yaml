@@ -447,6 +447,25 @@ $defs:
                   description: Specifies whether redirection status codes (`300–399`) should be treated as errors.
               required: [ document, operationId ]
               unevaluatedProperties: false
+      - title: CallRule
+        description: Defines a light-rule execution to perform complex business decisions.
+        type: object
+        unevaluatedProperties: false
+        required: [ call, with ]
+        allOf:
+        - $ref: '#/$defs/taskBase'
+        - properties:
+            call:
+              type: string
+              const: rule
+            with:
+              type: object
+              properties:
+                ruleId:
+                  type: string
+                  description: The unique identifier of the light-rule to execute.
+              required: [ ruleId ]
+              unevaluatedProperties: false
       - title: CallA2A
         description: Defines the A2A call to perform.
         type: object
@@ -497,7 +516,7 @@ $defs:
             call:
               type: string
               not:
-                enum: ["asyncapi", "grpc", "http", "openapi", "a2a"]
+                enum: ["asyncapi", "grpc", "http", "openapi", "a2a", "rule"]
               description: The name of the function to call.
             with:
               type: object
