@@ -1,4 +1,4 @@
-$id: https://agentic-workflow.org/schemas/0.9.0/workflow.yaml
+$id: https://agentic-workflow.org/schemas/0.10.0/workflow.yaml
 $schema: https://json-schema.org/draft/2020-12/schema
 description: Agentic Workflow DSL - Workflow Schema.
 type: object
@@ -77,6 +77,12 @@ properties:
         description: The workflow's reusable data stores.
         additionalProperties:
           $ref: '#/$defs/dataStore'
+      mcpSessions:
+        type: object
+        title: UseMcpSessions
+        description: The workflow's reusable MCP sessions.
+        additionalProperties:
+          $ref: '#/$defs/mcpSession'
       errors:
         type: object
         title: UseErrors
@@ -197,6 +203,14 @@ $defs:
         $ref: '#/$defs/export'
         title: TaskBaseExport
         description: Export task output to context.
+      explain:
+        $ref: '#/$defs/explain'
+        title: TaskBaseExplain
+        description: User-facing explanation metadata for agent-guided execution.
+      idempotencyKey:
+        type: string
+        title: TaskBaseIdempotencyKey
+        description: A runtime expression or literal key used to make replay of mutating operations safe.
       timeout:
         title: TaskTimeout
         oneOf:
@@ -221,6 +235,8 @@ $defs:
     unevaluatedProperties: false
     oneOf:
       - $ref: '#/$defs/agentTask'
+      - $ref: '#/$defs/askTask'
+      - $ref: '#/$defs/assertTask'
       - $ref: '#/$defs/callTask'
       - $ref: '#/$defs/doTask'
       - $ref: '#/$defs/forkTask'
@@ -233,6 +249,137 @@ $defs:
       - $ref: '#/$defs/switchTask'
       - $ref: '#/$defs/tryTask'
       - $ref: '#/$defs/waitTask'
+  askTask:
+    type: object
+    title: AskTask
+    description: Pauses workflow execution to request human input or approval.
+    required: [ ask ]
+    unevaluatedProperties: false
+    allOf:
+    - $ref: '#/$defs/taskBase'
+    - properties:
+        ask:
+          type: object
+          title: AskTaskConfiguration
+          description: The human input request to perform.
+          unevaluatedProperties: false
+          properties:
+            prompt:
+              type: string
+              title: AskPrompt
+              description: The user-facing prompt.
+            mode:
+              type: string
+              title: AskMode
+              description: The type of input expected from the user.
+              enum: [ text, choice, multiChoice, confirm, file, object, approval ]
+              default: text
+            options:
+              type: array
+              title: AskOptions
+              description: Static options available to the user for choice modes.
+              items:
+                $ref: '#/$defs/askOption'
+            optionsFrom:
+              $ref: '#/$defs/runtimeExpression'
+              title: AskOptionsFrom
+              description: A runtime expression that resolves to dynamic options.
+            schema:
+              $ref: '#/$defs/schema'
+              title: AskSchema
+              description: The schema used to validate structured user input.
+            validate:
+              $ref: '#/$defs/askValidation'
+              title: AskValidate
+              description: Validation to apply to the user's answer before continuing.
+            default:
+              title: AskDefault
+              description: The default answer, if any.
+            required:
+              type: boolean
+              title: AskRequired
+              description: Whether the workflow can continue without an answer.
+              default: true
+            timeout:
+              oneOf:
+                - $ref: '#/$defs/timeout'
+                - type: string
+              title: AskTimeout
+              description: The timeout for the human response.
+            onTimeout:
+              $ref: '#/$defs/askTimeoutPolicy'
+              title: AskOnTimeout
+              description: The policy to apply when the ask task times out.
+            retryOnInvalid:
+              title: AskRetryOnInvalid
+              description: Whether, or how many times, to re-prompt when the answer is invalid.
+              oneOf:
+                - type: boolean
+                - type: integer
+                  minimum: 0
+            sensitive:
+              type: boolean
+              title: AskSensitive
+              description: Whether the answer should be redacted in logs and reports.
+              default: false
+          required: [ prompt ]
+  assertTask:
+    type: object
+    title: AssertTask
+    description: Validates workflow state, task output, or arbitrary data and raises a catchable workflow error when validation fails.
+    required: [ assert ]
+    unevaluatedProperties: false
+    allOf:
+    - $ref: '#/$defs/taskBase'
+    - properties:
+        assert:
+          type: object
+          title: AssertTaskConfiguration
+          description: The assertion definitions to evaluate.
+          unevaluatedProperties: false
+          properties:
+            value:
+              title: AssertValue
+              description: The value to assert against. Accepts a literal value or a runtime expression. Defaults to the previous task output if omitted.
+            equals:
+              title: AssertEquals
+              description: Asserts that the value equals this expected value.
+            contains:
+              title: AssertContains
+              description: Asserts that the value contains this expected value.
+            matches:
+              type: string
+              title: AssertMatches
+              description: Asserts that the value matches this regular expression.
+            exists:
+              type: boolean
+              title: AssertExists
+              description: Asserts whether the value exists.
+            json:
+              type: object
+              title: AssertJson
+              description: JSONPath assertions. JSONPath syntax should follow RFC 9535 where possible.
+              additionalProperties:
+                $ref: '#/$defs/assertComparison'
+            schema:
+              $ref: '#/$defs/schema'
+              title: AssertSchema
+              description: Schema assertion to apply to the value.
+            rule:
+              type: object
+              title: AssertRule
+              description: Rule assertion for complex business validation.
+              unevaluatedProperties: false
+              properties:
+                ruleId:
+                  type: string
+                  title: AssertRuleId
+                  description: The unique identifier of the light-rule to execute.
+                input:
+                  title: AssertRuleInput
+                  description: The rule input.
+              required: [ ruleId ]
+          minProperties: 1
   callTask:
     title: CallTask
     description: Defines the call to perform.
@@ -346,6 +493,12 @@ $defs:
                   title: WithGRPCArguments
                   description: The arguments, if any, to call the method with.
                   additionalProperties: true
+                transport:
+                  type: string
+                  title: WithGRPCTransport
+                  description: The transport to use for the GRPC call.
+                  enum: [ grpc, websocket ]
+                  default: grpc
               required: [ proto, service, method ]
               unevaluatedProperties: false
       - title: CallHTTP
@@ -466,6 +619,203 @@ $defs:
                   description: The unique identifier of the light-rule to execute.
               required: [ ruleId ]
               unevaluatedProperties: false
+      - title: CallJSONRPC
+        description: Defines the JSON-RPC 2.0 call to perform.
+        type: object
+        unevaluatedProperties: false
+        required: [ call, with ]
+        allOf:
+        - $ref: '#/$defs/taskBase'
+        - properties:
+            call:
+              type: string
+              const: jsonrpc
+            with:
+              type: object
+              title: JSONRPCArguments
+              description: The JSON-RPC 2.0 call arguments.
+              properties:
+                endpoint:
+                  $ref: '#/$defs/endpoint'
+                  title: JSONRPCEndpoint
+                  description: The endpoint to send the JSON-RPC request to.
+                transport:
+                  type: string
+                  title: JSONRPCTransport
+                  description: The transport to use for the JSON-RPC call.
+                  enum: [ http, websocket ]
+                  default: http
+                method:
+                  type: string
+                  title: JSONRPCMethod
+                  description: The JSON-RPC method to invoke.
+                params:
+                  title: JSONRPCParams
+                  description: The JSON-RPC params value, if any.
+                id:
+                  title: JSONRPCId
+                  description: The JSON-RPC request id. Omit when notification is true.
+                  oneOf:
+                    - type: string
+                    - type: integer
+                    - type: "null"
+                notification:
+                  type: boolean
+                  title: JSONRPCNotification
+                  description: If true, sends a JSON-RPC notification and does not wait for a JSON-RPC response body.
+                  default: false
+                headers:
+                  oneOf:
+                    - type: object
+                      additionalProperties:
+                        type: string
+                    - $ref: '#/$defs/runtimeExpression'
+                  title: JSONRPCHeaders
+                  description: A name/value mapping of headers, if any.
+                authentication:
+                  $ref: '#/$defs/referenceableAuthenticationPolicy'
+                  title: JSONRPCAuthentication
+                  description: The authentication policy, if any, to use.
+                output:
+                  type: string
+                  title: JSONRPCOutput
+                  description: The JSON-RPC call output format. Defaults to result.
+                  enum: [ raw, response, result ]
+                errorPolicy:
+                  $ref: '#/$defs/jsonRpcErrorPolicy'
+                  title: JSONRPCErrorPolicy
+                  description: How JSON-RPC error responses are mapped into workflow errors.
+              required: [ endpoint, method ]
+              unevaluatedProperties: false
+      - title: CallOpenRPC
+        description: Defines the OpenRPC-described JSON-RPC call to perform.
+        type: object
+        unevaluatedProperties: false
+        required: [ call, with ]
+        allOf:
+        - $ref: '#/$defs/taskBase'
+        - properties:
+            call:
+              type: string
+              const: openrpc
+            with:
+              type: object
+              title: OpenRPCArguments
+              description: The OpenRPC call arguments.
+              properties:
+                document:
+                  $ref: '#/$defs/externalResource'
+                  title: OpenRPCDocument
+                  description: The document that defines the OpenRPC method to call.
+                server:
+                  title: OpenRPCServer
+                  description: A server name from the OpenRPC document or an inline endpoint override.
+                  oneOf:
+                    - type: string
+                    - $ref: '#/$defs/endpoint'
+                transport:
+                  type: string
+                  title: OpenRPCTransport
+                  description: The transport to use for the OpenRPC call.
+                  enum: [ http, websocket ]
+                  default: http
+                method:
+                  type: string
+                  title: OpenRPCMethod
+                  description: The OpenRPC method to invoke.
+                params:
+                  title: OpenRPCParams
+                  description: The method params value, if any.
+                id:
+                  title: OpenRPCId
+                  description: The JSON-RPC request id. Omit when notification is true.
+                  oneOf:
+                    - type: string
+                    - type: integer
+                    - type: "null"
+                notification:
+                  type: boolean
+                  title: OpenRPCNotification
+                  description: If true, sends a JSON-RPC notification and does not wait for a JSON-RPC response body.
+                  default: false
+                authentication:
+                  $ref: '#/$defs/referenceableAuthenticationPolicy'
+                  title: OpenRPCAuthentication
+                  description: The authentication policy, if any, to use.
+                output:
+                  type: string
+                  title: OpenRPCOutput
+                  description: The OpenRPC call output format. Defaults to result.
+                  enum: [ raw, response, result ]
+                errorPolicy:
+                  $ref: '#/$defs/jsonRpcErrorPolicy'
+                  title: OpenRPCErrorPolicy
+                  description: How JSON-RPC error responses are mapped into workflow errors.
+              required: [ document, method ]
+              unevaluatedProperties: false
+      - title: CallMCP
+        description: Defines the MCP call to perform.
+        type: object
+        unevaluatedProperties: false
+        required: [ call, with ]
+        allOf:
+        - $ref: '#/$defs/taskBase'
+        - properties:
+            call:
+              type: string
+              const: mcp
+            with:
+              type: object
+              title: MCPArguments
+              description: The MCP call arguments.
+              properties:
+                document:
+                  $ref: '#/$defs/externalResource'
+                  title: MCPCapabilityDocument
+                  description: The MCP capability document used for validation and agent-readable descriptions.
+                serverRef:
+                  type: string
+                  title: MCPServerReference
+                  description: The name of an MCP server from an API capability document.
+                session:
+                  type: string
+                  title: MCPSessionReference
+                  description: The name of a reusable MCP session defined in use.mcpSessions.
+                server:
+                  $ref: '#/$defs/mcpServer'
+                  title: MCPServer
+                  description: Inline MCP server configuration.
+                tool:
+                  type: string
+                  title: MCPTool
+                  description: The MCP tool to invoke.
+                resource:
+                  type: string
+                  title: MCPResource
+                  description: The MCP resource to read.
+                prompt:
+                  type: string
+                  title: MCPPrompt
+                  description: The MCP prompt to get.
+                arguments:
+                  type: object
+                  title: MCPArgumentsObject
+                  description: The MCP tool, resource, or prompt arguments.
+                  additionalProperties: true
+                authentication:
+                  $ref: '#/$defs/referenceableAuthenticationPolicy'
+                  title: MCPAuthentication
+                  description: The authentication policy, if any, to use.
+                output:
+                  type: string
+                  title: MCPOutput
+                  description: The MCP call output format. Defaults to content.
+                  enum: [ raw, response, content ]
+              oneOf:
+                - required: [ tool ]
+                - required: [ resource ]
+                - required: [ prompt ]
+              unevaluatedProperties: false
       - title: CallA2A
         description: Defines the A2A call to perform.
         type: object
@@ -516,7 +866,7 @@ $defs:
             call:
               type: string
               not:
-                enum: ["asyncapi", "grpc", "http", "openapi", "a2a", "rule"]
+                enum: ["asyncapi", "grpc", "http", "openapi", "a2a", "rule", "jsonrpc", "openrpc", "mcp"]
               description: The name of the function to call.
             with:
               type: object
@@ -964,6 +1314,278 @@ $defs:
         enum: [ continue, exit, end ]
         default: continue
       - type: string
+  askOption:
+    title: AskOption
+    description: A selectable option presented by an ask task.
+    oneOf:
+      - type: string
+        title: AskOptionValue
+        description: The literal option value.
+      - type: object
+        title: AskOptionObject
+        description: A labeled option with an optional description and value.
+        unevaluatedProperties: false
+        properties:
+          label:
+            type: string
+            title: AskOptionLabel
+            description: The user-facing option label.
+          value:
+            title: AskOptionObjectValue
+            description: The value returned when the option is selected.
+          description:
+            type: string
+            title: AskOptionDescription
+            description: Additional user-facing context for the option.
+        required: [ label, value ]
+  askValidation:
+    type: object
+    title: AskValidation
+    description: Validation rules for an ask task answer.
+    unevaluatedProperties: false
+    properties:
+      minLength:
+        type: integer
+        minimum: 0
+        title: AskValidationMinLength
+        description: Minimum string length.
+      maxLength:
+        type: integer
+        minimum: 0
+        title: AskValidationMaxLength
+        description: Maximum string length.
+      pattern:
+        type: string
+        title: AskValidationPattern
+        description: Regular expression the answer must match.
+      enum:
+        type: array
+        title: AskValidationEnum
+        description: Allowed answer values.
+        items: true
+      schema:
+        $ref: '#/$defs/schema'
+        title: AskValidationSchema
+        description: Schema used to validate the answer.
+  askTimeoutPolicy:
+    title: AskTimeoutPolicy
+    description: Policy to apply when an ask task times out.
+    oneOf:
+      - type: string
+        title: AskTimeoutPolicyEnum
+        enum: [ fail, continue, default ]
+      - type: object
+        title: AskTimeoutPolicyObject
+        unevaluatedProperties: false
+        properties:
+          action:
+            type: string
+            title: AskTimeoutAction
+            enum: [ fail, continue, default ]
+          default:
+            title: AskTimeoutDefault
+            description: The answer to use when action is default.
+        required: [ action ]
+  assertComparison:
+    title: AssertComparison
+    description: A comparison applied by an assert task.
+    oneOf:
+      - type: object
+        title: AssertComparisonObject
+        minProperties: 1
+        unevaluatedProperties: false
+        properties:
+          equals:
+            title: AssertComparisonEquals
+            description: Asserts that the selected value equals this expected value.
+          contains:
+            title: AssertComparisonContains
+            description: Asserts that the selected value contains this expected value.
+          matches:
+            type: string
+            title: AssertComparisonMatches
+            description: Asserts that the selected value matches this regular expression.
+          exists:
+            type: boolean
+            title: AssertComparisonExists
+            description: Asserts whether the selected value exists.
+          hasLength:
+            title: AssertComparisonHasLength
+            description: Asserts the length of an array or string.
+            oneOf:
+              - type: integer
+                title: AssertComparisonHasLengthExact
+                description: Asserts an exact length.
+                minimum: 0
+              - type: object
+                title: AssertComparisonHasLengthRange
+                description: Asserts a length range.
+                unevaluatedProperties: false
+                minProperties: 1
+                properties:
+                  gt:
+                    type: integer
+                    title: AssertComparisonHasLengthGt
+                    description: Asserts that the length is greater than this value.
+                  gte:
+                    type: integer
+                    title: AssertComparisonHasLengthGte
+                    description: Asserts that the length is greater than or equal to this value.
+                  lt:
+                    type: integer
+                    title: AssertComparisonHasLengthLt
+                    description: Asserts that the length is less than this value.
+                  lte:
+                    type: integer
+                    title: AssertComparisonHasLengthLte
+                    description: Asserts that the length is less than or equal to this value.
+      - type: string
+        title: AssertComparisonExpression
+        description: A runtime expression that evaluates the assertion.
+  jsonRpcErrorPolicy:
+    type: object
+    title: JsonRpcErrorPolicy
+    description: Defines how JSON-RPC error responses are mapped into workflow errors.
+    unevaluatedProperties: false
+    properties:
+      throw:
+        type: boolean
+        title: JsonRpcErrorPolicyThrow
+        description: Whether a JSON-RPC error response should raise a catchable workflow error.
+        default: true
+      errorType:
+        title: JsonRpcErrorPolicyErrorType
+        description: The workflow error type to use for JSON-RPC errors.
+        oneOf:
+          - $ref: '#/$defs/uriTemplate'
+          - $ref: '#/$defs/runtimeExpression'
+      includeResponse:
+        type: boolean
+        title: JsonRpcErrorPolicyIncludeResponse
+        description: Whether the original JSON-RPC response should be included in the raised error.
+        default: true
+  mcpServer:
+    type: object
+    title: McpServer
+    description: Inline MCP server connection configuration.
+    unevaluatedProperties: false
+    properties:
+      endpoint:
+        $ref: '#/$defs/endpoint'
+        title: McpServerEndpoint
+        description: The MCP server endpoint.
+      transport:
+        type: string
+        title: McpServerTransport
+        description: The transport used to communicate with the MCP server.
+        enum: [ stdio, sse, streamable-http, websocket ]
+      command:
+        type: string
+        title: McpServerCommand
+        description: Command used for stdio MCP servers.
+      args:
+        type: array
+        title: McpServerArgs
+        description: Command arguments used for stdio MCP servers.
+        items:
+          type: string
+      env:
+        type: object
+        title: McpServerEnv
+        description: Environment variables used for stdio MCP servers.
+        additionalProperties:
+          type: string
+      authentication:
+        $ref: '#/$defs/referenceableAuthenticationPolicy'
+        title: McpServerAuthentication
+        description: Authentication policy used for the MCP server.
+    anyOf:
+      - required: [ endpoint ]
+      - required: [ command ]
+  mcpSession:
+    type: object
+    title: McpSession
+    description: Reusable MCP session lifecycle configuration.
+    unevaluatedProperties: false
+    properties:
+      server:
+        title: McpSessionServer
+        description: Inline server configuration or a server reference from an MCP capability document.
+        oneOf:
+          - type: string
+          - $ref: '#/$defs/mcpServer'
+      initialize:
+        type: boolean
+        title: McpSessionInitialize
+        description: Whether to initialize the MCP session before the first call.
+        default: true
+      reuse:
+        type: boolean
+        title: McpSessionReuse
+        description: Whether calls should reuse the same MCP session.
+        default: true
+      close:
+        type: string
+        title: McpSessionClose
+        description: When to close the MCP session.
+        enum: [ workflowEnd, taskEnd, never ]
+        default: workflowEnd
+      timeout:
+        title: McpSessionTimeout
+        description: Timeout used while establishing or using the session.
+        oneOf:
+          - $ref: '#/$defs/timeout'
+          - type: string
+    required: [ server ]
+  explain:
+    type: object
+    title: Explain
+    description: User-facing guidance for agent-guided workflow execution.
+    unevaluatedProperties: false
+    properties:
+      purpose:
+        type: string
+        title: ExplainPurpose
+        description: Why the task exists in the workflow.
+      visible:
+        type: boolean
+        title: ExplainVisible
+        description: Whether the explanation should be shown during interactive execution.
+        default: true
+      before:
+        type: string
+        title: ExplainBefore
+        description: Message an agent can show before running the task.
+      success:
+        type: string
+        title: ExplainSuccess
+        description: Message an agent can show after the task succeeds.
+      failure:
+        type: string
+        title: ExplainFailure
+        description: Message an agent can show after the task fails.
+      requires:
+        type: array
+        title: ExplainRequires
+        description: Prerequisites, permissions, or input values the agent should mention before the task runs.
+        examples:
+          - [ "portal-command-token authentication", "apiId from prior step" ]
+          - [ { auth: portal-command-token }, { context: apiId } ]
+        items:
+          oneOf:
+            - type: string
+            - type: object
+              title: ExplainRequirement
+              minProperties: 1
+              maxProperties: 1
+              additionalProperties:
+                type: string
+    if:
+      properties:
+        visible:
+          const: true
+    then:
+      required: [ purpose ]
   referenceableAuthenticationPolicy:
     type: object
     title: ReferenceableAuthenticationPolicy
@@ -1489,7 +2111,7 @@ $defs:
     properties:
       extend:
         type: string
-        enum: [ call, composite, emit, for, listen, raise, run, set, switch, try, wait, all ]
+        enum: [ ask, assert, call, composite, emit, for, listen, raise, run, set, switch, try, wait, all ]
         title: ExtensionTarget
         description: The type of task to extend.
       when:
