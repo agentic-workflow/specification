@@ -274,6 +274,10 @@ $defs:
               description: The type of input expected from the user.
               enum: [ text, choice, multiChoice, confirm, file, object, approval ]
               default: text
+            assignment:
+              $ref: '#/$defs/askAssignment'
+              title: AskAssignment
+              description: Worklist assignment to create while the ask task waits for human input.
             options:
               type: array
               title: AskOptions
@@ -323,6 +327,33 @@ $defs:
               description: Whether the answer should be redacted in logs and reports.
               default: false
           required: [ prompt ]
+  askAssignment:
+    type: object
+    title: AskAssignment
+    description: Defines who can act on an ask task while it waits for human input.
+    unevaluatedProperties: false
+    properties:
+      assigneeId:
+        type: string
+        title: AskAssignmentAssigneeId
+        description: Direct worklist assignee id.
+      roleId:
+        type: string
+        title: AskAssignmentRoleId
+        description: Role whose active users receive task assignments.
+      categoryCode:
+        type: string
+        title: AskAssignmentCategoryCode
+        description: Worklist category used for the assignment.
+        default: "(all)"
+      reasonCode:
+        type: string
+        title: AskAssignmentReasonCode
+        description: Reason stored on the task assignment.
+        default: ask
+    anyOf:
+      - required: [ assigneeId ]
+      - required: [ roleId ]
   assertTask:
     type: object
     title: AssertTask
