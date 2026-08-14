@@ -1,0 +1,7 @@
+name: Open Workflow Specification
+version: 1.0.3
+repository: https://github.com/open-workflow-specification/specification
+schema: https://github.com/open-workflow-specification/specification/blob/2dd2c84170d5f3e05d58e913e9ca298dcf8d543a/schema/workflow.yaml
+rawSchema: https://raw.githubusercontent.com/open-workflow-specification/specification/2dd2c84170d5f3e05d58e913e9ca298dcf8d543a/schema/workflow.yaml
+commit: 2dd2c84170d5f3e05d58e913e9ca298dcf8d543a
+sha256: 704ef5e91c5d823167dd8751794edb1dd1a6f9a3bdf9bfd389bf9c6b23ae3816

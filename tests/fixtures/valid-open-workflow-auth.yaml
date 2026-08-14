@@ -1,0 +1,19 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: canonical-authentication
+  version: 1.0.0
+use:
+  authentications:
+    canonical-oauth2:
+      oauth2:
+        authority: https://identity.example
+        grant: client_credentials
+    canonical-oidc:
+      oidc:
+        authority: https://identity.example
+        grant: authorization_code
+do:
+  - finish:
+      set:
+        authenticated: true

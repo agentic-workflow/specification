@@ -1,0 +1,11 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: ambiguous-mcp
+  version: 1.0.0
+do:
+  - ambiguous:
+      call: mcp
+      with:
+        tool: customer_lookup
+        resource: https://gateway.example/customers/C-1

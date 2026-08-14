@@ -1,118 +1,128 @@
-# Hybrid Agentic Workflow Specification
+# Agentic Workflow Specification
 
-This document describes the **Hybrid Agentic Workflow** specification, which extends the [Serverless Workflow DSL](https://serverlessworkflow.io) to support autonomous AI Agents.
+Agentic Workflow 1.0.3 is a compatible extension of Open Workflow 1.0.3 for
+AI-assisted and human-in-the-loop orchestration. The version remains `1.0.3`
+to make the upstream synchronization point explicit.
 
-## Concept
+The exact upstream source is pinned in
+[`schema/open-workflow-1.0.3.provenance.yaml`](schema/open-workflow-1.0.3.provenance.yaml).
 
-Traditional workflows are **deterministic**: `Input -> Step A -> Step B -> Output`.
-Agentic Workflows are **probabilistic**: `Goal -> Agent (Think/Act loop) -> Result`.
+## Compatibility policy
 
-This specification supports a **Hybrid** approach where:
-1.  **Orchestration**: The deterministic workflow acts as the "Manager", handling state, approvals, and routing.
-2.  **Autonomy**: Specific steps are delegated to "Agents" to solve complex, non-deterministic problems.
+- Open Workflow 1.0.3 is the normative orchestration core.
+- Agentic additions are additive: agent, ask, assert, rule, JSON-RPC/OpenRPC,
+  reusable MCP sessions, data stores, and explanatory/idempotency metadata.
+- Canonical Open Workflow MCP syntax and the existing Agentic MCP shorthand are
+  both accepted. New portable workflows should prefer the canonical syntax.
+- The supported expression language is declared with top-level `evaluate`.
+  The current Light Workflow runtime executes CEL definitions and therefore
+  requires an explicit `evaluate.language: cel`. Open Workflow defaults an
+  omitted evaluation configuration to `jq`, which Light Workflow rejects at
+  admission rather than passing jq expressions to its CEL evaluator.
+- Schema acceptance and runtime execution are separate capabilities. The
+  runtime rejects an unimplemented task, call, language, or transport before a
+  process is persisted.
 
-## Key Changes
+## Agent call
 
-### 1. `use.agents` Definition
+The executable agent form is `call: agent`:
 
-You can now define reusable agents in the `use` block, similar to how you define `functions`.
+```yaml
+document:
+  dsl: 1.0.3
+  namespace: examples
+  name: review-customer
+  version: 1.0.0
+evaluate:
+  language: cel
+do:
+  - review:
+      call: agent
+      with:
+        agent: customer-reviewer
+        mode: service
+        input: '${{ customer }}'
+        outputSchema:
+          type: object
+          required: [decision]
+```
+
+The older standalone `agentTask` schema remains readable for 1.0 compatibility
+but is deprecated because the Rust runtime uses `call: agent`.
+
+## Legacy compatibility
+
+Open Workflow 1.0.3 uses argv arrays for `run.script.arguments` and
+`run.shell.arguments`, and requires `authority` plus `grant` in inline OAuth2
+and OIDC authentication properties. Agentic Workflow 1.0.3 also accepts the
+older argument maps and incomplete inline authentication objects so existing
+Agentic documents remain schema-readable. The argument-map branches and
+incomplete authentication shapes are compatibility-only; new documents should
+use the canonical Open Workflow forms.
+
+### Runtime migration for expression evaluation
+
+Open Workflow treats an omitted `evaluate` configuration as jq, while Light
+Workflow executes CEL only. Existing stored definitions without `evaluate`
+remain schema-readable, but attempts to create new processes from them will
+fail admission after the runtime upgrade. Add the following before upgrading:
+
+```yaml
+evaluate:
+  language: cel
+```
+
+The admission check does not rewrite or revalidate existing in-flight process
+snapshots.
+
+## Canonical MCP call
+
+```yaml
+do:
+  - lookup-customer:
+      call: mcp
+      with:
+        protocolVersion: '2025-06-18'
+        method: tools/call
+        parameters:
+          name: customer_lookup
+          arguments:
+            customerId: '${{ customerId }}'
+        transport:
+          http:
+            endpoint: https://gateway.example/mcp
+```
+
+The Agentic shorthand remains available when a durable workflow needs a named,
+reusable session:
 
 ```yaml
 use:
-  functions:
-    googleSearch:
-      type: custom
-      operation: search_tool
-      
-  agents:
-    researcher:
-      title: "Senior Research Assistant"
-      model: "gpt-4-turbo"
-      systemPrompt: "You are an expert researcher. Use tools to find facts."
-      capabilities:
-         - googleSearch
-      dataStores:
-         - myKnowledgeBase
-      reasoning:
-         scheme: react
-      examples:
-         - query: "Find me flights to Paris"
-           thought: "I need to check flight availability."
-           action: "googleSearch(paris flights)"
-  
-  dataStores:
-      myKnowledgeBase:
-          type: vector
-          uri: "gs://my-bucket/vector-index"
-```
-
-### 2. `agent` Task Type
-
-A new state type `agent` (or `agentTask` in the schema) delegates control to an LLM loop.
-
-```yaml
+  mcpSessions:
+    gateway:
+      server:
+        endpoint: https://gateway.example/mcp
+        transport: streamable-http
 do:
-  - name: MarketResearch
-    type: agent
-    agent: researcher # Reference to the agent above
-    goal: "Find the top 3 competitors for ${ .input.productName }"
-    constraints:
-      maxIterations: 10
-      timeout: "PT5M"
-    # The output of this task is the final answer from the Agent
+  - lookup-customer:
+      call: mcp
+      with:
+        session: gateway
+        tool: customer_lookup
+        arguments:
+          customerId: '${{ customerId }}'
 ```
 
-### 3. Inline Agents
+## Conformance check
 
-You can also define agents inline if they are one-off.
+The local check validates the Draft 2020-12 schema, representative upstream and
+Agentic fixtures, ambiguous MCP rejection, and the pinned upstream surface:
 
-```yaml
-do:
-  - name: Summarize
-    type: agent
-    agent:
-      model: "claude-3-opus"
-      systemPrompt: "Summarize this text concisely."
-    goal: "Summarize the following: ${ .marketResearchResult }"
+```bash
+./scripts/check-schema-conformance.py --upstream /path/to/open-workflow-1.0.3-workflow.yaml
 ```
 
-## Schema Details
-
-The schema extension includes:
-- **`Agent`**: Properties for `model`, `systemPrompt`, `temperature`, `capabilities` (tools), `dataStores` (RAG), `reasoning` (cognitive architecture), and `examples`.
-- **`AgentTask`**: Properties for `agent` (ref or inline), `goal` (prompt), `context` (history/files), and `constraints`.
-
-## Cognitive Architecture Support
-
-Based on the [Agents Whitepaper](./22365_19_Agents_v8.pdf), this specification supports:
-
-1.  **Tools**: Defined via `use.functions` (Extensions) and `use.agents` capabilities.
-2.  **Data Stores (RAG)**: Explicit support for `use.dataStores` to ground agents in factual data.
-3.  **Reasoning**: Configurable `reasoning.scheme` (ReAct, CoT, etc.) and `examples` for few-shot prompting to guide the agent's orchestration layer.
-
-## Dynamic Subflows
-
-Support for **Agent-Generated Workflows**. An agent can generate a full workflow definition, which the orchestrator then executes immediately.
-
-### Pattern: Plan & Execute
-
-1.  **Agent Task**: Generates a workflow definition (YAML/JSON) based on a high-level goal.
-2.  **Run Task**: Executes the generated definition.
-
-```yaml
-do:
-  - name: CreatePlan
-    type: agent
-    agent: planner_agent
-    goal: "Create a workflow to process order ${ .input.orderId }"
-    output:
-       as: "${ .plan }" # Save the generated workflow YAML/JSON to variable 'plan'
-
-  - name: ExecutePlan
-    type: run
-    run:
-      workflow:
-        definition: "${ .plan }" # Inject the generated definition
-```
-
-This allows for **Runtime Orchestration**, where the steps are not known at deploy time but decided by the AI.
+The supplied upstream file must match the checksum recorded in the provenance
+file. Running without `--upstream` still performs local schema and fixture
+validation. The GitHub Actions conformance job always downloads the pinned
+source and runs the strict upstream comparison.

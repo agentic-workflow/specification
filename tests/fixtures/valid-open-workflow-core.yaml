@@ -1,0 +1,36 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: open-workflow-core
+  version: 1.0.0
+evaluate:
+  language: jq
+  mode: strict
+schedule:
+  'on':
+    one:
+      with:
+        type: io.example.started
+  read: envelope
+do:
+  - iterate:
+      for:
+        each: item
+        in: [one, two]
+      do:
+        - run-item:
+            run:
+              shell:
+                command: process-item
+                stdin: '${ item }'
+                arguments: [--safe]
+      then: continue
+  - guarded:
+      try:
+        - emit-result:
+            emit:
+              event:
+                with:
+                  type: io.example.completed
+      catch:
+        then: end

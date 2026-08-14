@@ -1,0 +1,29 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: agentic-legacy-compat
+  version: 1.0.0
+use:
+  authentications:
+    legacy-oauth2:
+      oauth2:
+        client:
+          id: legacy-client
+    legacy-oidc:
+      oidc:
+        client:
+          id: legacy-client
+do:
+  - legacy-script-arguments:
+      run:
+        script:
+          language: python
+          code: print('legacy')
+          arguments:
+            customerId: C-1
+  - legacy-shell-arguments:
+      run:
+        shell:
+          command: customer-lookup
+          arguments:
+            customerId: C-1

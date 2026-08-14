@@ -1,0 +1,46 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: agentic-extensions
+  version: 1.0.0
+evaluate:
+  language: cel
+use:
+  agents:
+    reviewer:
+      model: gpt
+  dataStores:
+    customers:
+      type: document
+  mcpSessions:
+    gateway:
+      server:
+        endpoint: https://gateway.example/mcp
+        transport: streamable-http
+do:
+  - review:
+      call: agent
+      with:
+        agent: reviewer
+        mode: service
+        prompt: Review the customer profile.
+        outputSchema:
+          type: object
+  - call-tool-legacy:
+      call: mcp
+      with:
+        session: gateway
+        tool: customer_lookup
+        arguments:
+          customerId: C-1
+  - confirm:
+      ask:
+        prompt: Continue?
+        mode: confirm
+  - verify:
+      assert:
+        value: '${{ result }}'
+        exists: true
+  - legacy-agent-shape:
+      agent: reviewer
+      goal: Retained only for Agentic 1.0 schema compatibility.

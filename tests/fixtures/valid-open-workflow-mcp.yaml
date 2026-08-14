@@ -1,0 +1,26 @@
+document:
+  dsl: 1.0.3
+  namespace: conformance
+  name: canonical-mcp
+  version: 1.0.0
+do:
+  - call-tool:
+      call: mcp
+      with:
+        protocolVersion: '2025-06-18'
+        method: tools/call
+        parameters:
+          name: customer_lookup
+          arguments:
+            customerId: C-1
+        timeout: PT5S
+        transport:
+          http:
+            endpoint: https://gateway.example/mcp
+            headers:
+              x-tenant: demo
+        client:
+          name: conformance-test
+          version: 1.0.0
+        tool: canonical-call-may-carry-legacy-named-fields
+        x-vendor-trace: enabled
